@@ -3,8 +3,10 @@
 import logging
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from handlers.states import SearchStates
 from keyboards.recipe_kb import (
     CALLBACK_ADD_FAVORITE_PREFIX,
     CALLBACK_NEXT_RANDOM,
@@ -43,11 +45,30 @@ async def add_favorite(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == CALLBACK_NEXT_RANDOM)
-async def next_recipe(callback: CallbackQuery) -> None:
-    """Заменить текущий рецепт случайным из API."""
+async def next_recipe(callback: CallbackQuery, state: FSMContext) -> None:
+    """Показать следующий рецепт из результатов поиска (или случайный, если поиск уже закончился)."""
     await callback.answer("Загружаю другой рецепт…", show_alert=False)
 
-    recipe: Recipe | None = await get_random()
+    recipe: Recipe | None = None
+
+    # Идём по результатам текущего поиска, пока они не кончатся
+    if await state.get_state() == SearchStates.showing_results.state:
+        data = await state.get_data()
+        ids: list[str] = data.get("ids", [])
+        pos: int = data.get("pos", -1) + 1
+        if pos < len(ids):
+            await state.update_data(pos=pos)
+            recipe = await get_by_id(ids[pos])
+        else:
+            await callback.answer(
+                "Это все рецепты по вашему запросу 😉 Начните новый поиск",
+                show_alert=False,
+            )
+            return
+
+    if recipe is None:
+        # Поиск неактивен (например, карточка открыта из избранного) — случайный рецепт
+        recipe = await get_random()
     if recipe is None:
         await callback.answer("API не отвечает, попробуйте позже 😔", show_alert=True)
         return

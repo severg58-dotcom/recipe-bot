@@ -4,6 +4,7 @@ import html
 import logging
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from keyboards.favorites_kb import CALLBACK_VIEW_FAVORITE, favorites_list
@@ -18,8 +19,9 @@ log = logging.getLogger(__name__)
 
 
 @router.message(F.text == "⭐️ Мои рецепты")
-async def show_favorites(message: Message) -> None:
+async def show_favorites(message: Message, state: FSMContext) -> None:
     """Показать избранные рецепты пользователя в виде онлайн-кнопок."""
+    await state.clear()  # закрываем контекст поиска, чтобы не листало старые результаты
     favorite = database.get_favorites(message.from_user.id)
 
     title = html.escape("⭐️ Мои рецепты")

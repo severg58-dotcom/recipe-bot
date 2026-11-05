@@ -4,9 +4,9 @@ import logging
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
+from handlers.states import SearchStates
 from keyboards.main_menu import main_menu
 from keyboards.recipe_kb import recipe_card
 from services.recipes_api import Recipe, search_recipes
@@ -14,12 +14,6 @@ from utils.formatting import recipe_text
 
 router = Router(name="search")
 log = logging.getLogger(__name__)
-
-
-class SearchStates(StatesGroup):
-    """Состояния FSM: ожидание текстового запроса от пользователя."""
-
-    waiting_for_query = State()
 
 
 @router.message(F.text == "🔎 Поиск рецептов")
@@ -32,10 +26,9 @@ async def start_search(message: Message, state: FSMContext) -> None:
 @router.message(SearchStates.waiting_for_query, F.text)
 async def do_search(message: Message, state: FSMContext) -> None:
     """Найти рецепты по запросу (с переводом русских слов) и показать первый."""
-    await state.clear()
-
     recipes, note = await search_recipes(message.text)
     if not recipes:
+        await state.clear()
         await message.answer(
             "😕 Ничего не нашлось по запросу "
             f"<i>{message.text}</i>.\n"
@@ -43,6 +36,14 @@ async def do_search(message: Message, state: FSMContext) -> None:
             reply_markup=main_menu(),
         )
         return
+
+    # Запоминаем результаты поиска: кнопка «Другой рецепт» будет листать их
+    await state.set_state(SearchStates.showing_results)
+    await state.update_data(
+        ids=[r.id for r in recipes],
+        pos=0,
+        note=note,
+    )
 
     first: Recipe = recipes[0]
     try:
@@ -60,5 +61,5 @@ async def do_search(message: Message, state: FSMContext) -> None:
 
     if len(recipes) > 1:
         await message.answer(
-            f"Ещё найдено рецептов по запросу: {len(recipes) - 1}. Нажимайте «➡️ Другой рецепт» 😉"
+            f"Найдено рецептов: {len(recipes)}. Листайте кнопкой «➡️ Другой рецепт» 😉"
         )
