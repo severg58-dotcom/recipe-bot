@@ -21,6 +21,54 @@ REQUEST_TIMEOUT = 10.0  # секунд
 _CYRILLIC = re.compile(r"[\u0400-\u04FF]")
 _TRANSLATE_URL = "https://api.mymemory.translated.net/get"
 
+# Встроенный словарь: русское слово -> английский запрос для TheMealDB.
+# Работает без интернета, когда внешний переводчик недоступен/в лимите.
+_LOCAL_DICT: dict[str, str] = {
+    "борщ": "borsch",
+    "щи": "cabbage soup",
+    "паста": "pasta",
+    "макароны": "pasta",
+    "лапша": "noodles",
+    "спагетти": "spaghetti",
+    "пицца": "pizza",
+    "картофель": "potato",
+    "картошка": "potato",
+    "курица": "chicken",
+    "куриный": "chicken",
+    "цыплёнок": "chicken",
+    "рыба": "fish",
+    "лосось": "salmon",
+    "форель": "trout",
+    "суп": "soup",
+    "салат": "salad",
+    "мясо": "meat",
+    "говядина": "beef",
+    "стейк": "steak",
+    "свинина": "pork",
+    "котлета": "cutlet",
+    "утка": "duck",
+    "индейка": "turkey",
+    "креветки": "prawn",
+    "морепродукты": "seafood",
+    "рис": "rice",
+    "каша": "porridge",
+    "гречка": "buckwheat",
+    "хлеб": "bread",
+    "сыр": "cheese",
+    "яйца": "egg",
+    "омлет": "omelette",
+    "торт": "cake",
+    "пирог": "pie",
+    "печенье": "cookie",
+    "блин": "pancake",
+    "пельмени": "dumplings",
+    "грибы": "mushroom",
+    "овощи": "vegetable",
+    "десерт": "dessert",
+    "мороженое": "ice cream",
+    "шоколад": "chocolate",
+}
+
 
 @dataclass
 class Recipe:
@@ -146,7 +194,15 @@ async def search_recipes(query: str) -> tuple[list[Recipe], str]:
                 f"🔁 Перевод: <i>{word_en}</i> (по слову «{word}»)"
             )
 
-    # 3) последний шанс — искать как есть
+    # 3) внешний переводчик молчит или не помог — встроенный словарь
+    for word in query.split()[:4]:
+        word_en = _LOCAL_DICT.get(word.lower().strip(".,!?;:()"))
+        if word_en:
+            recipes = await search_by_name(word_en)
+            if recipes:
+                return recipes, f"🔁 Словарь: <i>{word_en}</i> (по слову «{word}»)"
+
+    # 4) последний шанс — искать как есть
     return await search_by_name(query), ""
 
 
