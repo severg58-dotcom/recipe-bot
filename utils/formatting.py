@@ -1,11 +1,16 @@
-"""Форматирование карточки рецепта для Telegram (HTML)."""
+"""Форматирование карточки рецепта для Telegram (HTML).
+
+Telegram ограничивает подпись к фото 1024 символами — текст собирается
+с динамическим бюджетом: инструкция подрезается так, чтобы caption влезал.
+"""
 
 import html
 from textwrap import shorten
 
 from services.recipes_api import Recipe
 
-MAX_INSTRUCTIONS = 900  # символов — Telegram ограничивает caption 1024
+CAPTION_LIMIT = 1024  # жёсткий лимит Telegram на caption фото
+_MIN_INSTRUCTIONS = 150  # минимум символов инструкции, ради которых готовим
 
 
 def recipe_text(recipe: Recipe) -> str:
@@ -24,11 +29,40 @@ def recipe_text(recipe: Recipe) -> str:
             amount = html.escape(measure)
             lines.append(f"  • {ing}" + (f" — {amount}" if amount else ""))
 
-    if recipe.instructions:
-        trimmed = shorten(recipe.instructions, width=MAX_INSTRUCTIONS, placeholder=" …")
-        lines.append(f"\n<b>Как готовить:</b>\n{html.escape(trimmed)}")
+    head = "\n".join(lines)
 
+    video = ""
     if recipe.youtube_url:
-        lines.append(f'\n▶️ <a href="{html.escape(recipe.youtube_url, quote=True)}">Видео-рецепт</a>')
+        video = f'\n▶️ <a href="{html.escape(recipe.youtube_url, quote=True)}">Видео-рецепт</a>'
 
-    return "\n".join(lines)
+    label = "\n\n<b>Как готовить:</b>\n"
+
+    # Бюджет под инструкцию: лимит минус всё остальное
+    width = CAPTION_LIMIT - len(head) - len(label) - len(video) - 20
+    if width < _MIN_INSTRUCTIONS:
+        # Инструкция важнее ссылки на видео — её отдаём приоритет
+        video = ""
+        width = CAPTION_LIMIT - len(head) - len(label) - 20
+
+    if recipe.instructions:
+        instr = html.escape(
+            shorten(recipe.instructions, width=max(_MIN_INSTRUCTIONS, width), placeholder=" …")
+        )
+    else:
+        instr = ""
+
+    text = head + label + instr + video
+
+    # Страховка: html.escape мог немного раздуть текст — ужимаем инструкцию повторно
+    if len(text) > CAPTION_LIMIT and recipe.instructions:
+        excess = len(text) - CAPTION_LIMIT + 20
+        instr = html.escape(
+            shorten(
+                recipe.instructions,
+                width=max(60, width - excess),
+                placeholder=" …",
+            )
+        )
+        text = head + label + instr + video
+
+    return text
