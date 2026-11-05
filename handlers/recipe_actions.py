@@ -10,6 +10,7 @@ from handlers.states import SearchStates
 from keyboards.recipe_kb import (
     CALLBACK_ADD_FAVORITE_PREFIX,
     CALLBACK_NEXT_RANDOM,
+    CALLBACK_RATE_PREFIX,
     recipe_card,
 )
 from services import database
@@ -36,11 +37,17 @@ async def add_favorite(callback: CallbackQuery) -> None:
         return
 
     database.save_favorite(user_id, recipe_id, recipe.title)
-    await callback.answer("Сохранено ⭐️", show_alert=False)
+    await callback.answer(
+        "Сохранено ⭐️ — теперь оцените блюдо звёздами ниже", show_alert=False
+    )
 
     if isinstance(callback.message, Message):
         await callback.message.edit_reply_markup(
-            reply_markup=recipe_card(recipe_id, is_favorite=True)
+            reply_markup=recipe_card(
+                recipe_id,
+                is_favorite=True,
+                rating=database.get_rating(user_id, recipe_id),
+            )
         )
 
 
@@ -78,14 +85,42 @@ async def next_recipe(callback: CallbackQuery, state: FSMContext) -> None:
     except Exception:  # noqa: BLE001 — не критично, если старое сообщение не удалилось
         log.warning("Не удалось удалить карточку рецепта")
 
+    user_id = callback.from_user.id
+    is_fav = database.is_favorite(user_id, recipe.id)
+    rating = database.get_rating(user_id, recipe.id) if is_fav else 0
+
     try:
         await callback.message.answer_photo(
             photo=recipe.image_url,
             caption=recipe_text(recipe),
-            reply_markup=recipe_card(recipe.id),
+            reply_markup=recipe_card(recipe.id, is_favorite=is_fav, rating=rating),
         )
     except Exception:  # noqa: BLE001 — картинка могла не загрузиться
         log.warning("Не удалось отправить фото рецепта %s, отправляю текстом", recipe.id)
         await callback.message.answer(
-            recipe_text(recipe), reply_markup=recipe_card(recipe.id)
+            recipe_text(recipe),
+            reply_markup=recipe_card(recipe.id, is_favorite=is_fav, rating=rating),
+        )
+
+
+@router.callback_query(F.data.startswith(CALLBACK_RATE_PREFIX))
+async def rate_recipe(callback: CallbackQuery) -> None:
+    """Поставить рейтинг 1..5 звёзд; сохраняет рецепт, если он ещё не в избранном."""
+    _, recipe_id, stars = callback.data.split(":")
+    stars = int(stars)
+    user_id = callback.from_user.id
+
+    if not database.is_favorite(user_id, recipe_id):
+        recipe: Recipe | None = await get_by_id(recipe_id)
+        if recipe is None:
+            await callback.answer("API не отвечает, попробуйте позже 😔", show_alert=True)
+            return
+        database.save_favorite(user_id, recipe_id, recipe.title)
+
+    database.set_rating(user_id, recipe_id, stars)
+    await callback.answer(f"Ваша оценка: {stars} ⭐", show_alert=False)
+
+    if isinstance(callback.message, Message):
+        await callback.message.edit_reply_markup(
+            reply_markup=recipe_card(recipe_id, is_favorite=True, rating=stars)
         )

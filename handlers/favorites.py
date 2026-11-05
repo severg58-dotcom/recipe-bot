@@ -54,15 +54,24 @@ async def view_favorite(callback: CallbackQuery) -> None:
         return
 
     user_id = callback.from_user.id
+    rating = database.get_rating(user_id, recipe_id)
     try:
         await callback.message.answer_photo(
             photo=recipe.image_url,
             caption=recipe_text(recipe),
-            reply_markup=recipe_card(recipe.id, is_favorite=database.is_favorite(user_id, recipe.id)),
+            reply_markup=recipe_card(
+                recipe.id,
+                is_favorite=database.is_favorite(user_id, recipe.id),
+                rating=rating,
+            ),
         )
     except Exception:  # noqa: BLE001 — картинка могла не загрузиться
         log.warning("Не удалось отправить фото рецепта %s, отправляю текстом", recipe.id)
         await callback.message.answer(
             recipe_text(recipe),
-            reply_markup=recipe_card(recipe.id, is_favorite=database.is_favorite(user_id, recipe.id)),
+            reply_markup=recipe_card(
+                recipe.id,
+                is_favorite=database.is_favorite(user_id, recipe.id),
+                rating=rating,
+            ),
         )

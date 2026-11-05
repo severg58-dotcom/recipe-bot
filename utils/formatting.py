@@ -37,12 +37,10 @@ def recipe_text(recipe: Recipe) -> str:
 
     label = "\n\n<b>Как готовить:</b>\n"
 
-    # Бюджет под инструкцию: лимит минус всё остальное
+    # Бюджет под инструкцию: лимит минус всё остальное.
+    # Ссылка на видео по заданию обязательна — не отбрасываем её,
+    # при нехватке места сначала сильнее ужмётся инструкция (страховка ниже).
     width = CAPTION_LIMIT - len(head) - len(label) - len(video) - 20
-    if width < _MIN_INSTRUCTIONS:
-        # Инструкция важнее ссылки на видео — её отдаём приоритет
-        video = ""
-        width = CAPTION_LIMIT - len(head) - len(label) - 20
 
     if recipe.instructions:
         instr = html.escape(

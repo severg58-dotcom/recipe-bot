@@ -118,7 +118,7 @@ def _parse_meal(meal: dict) -> Recipe:
         category=meal.get("strCategory", "") or "",
         instructions=(meal.get("strInstructions", "") or "").replace("\r\n", "\n"),
         area=meal.get("strArea", "") or "",
-        youtube_url=meal.get("strYouTube", "") or "",
+        youtube_url=meal.get("strYoutube", "") or "",
         ingredients=ingredients,
     )
 
